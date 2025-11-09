@@ -46,3 +46,5 @@ jobs:
           echo "✅ Images built and pushed successfully!"
           echo "📦 Client: ${{ secrets.DOCKER_USERNAME }}/votex-client:${{ github.run_number }}"
           echo "📦 Server: ${{ secrets.DOCKER_USERNAME }}/votex-server:${{ github.run_number }}"
+
+          # run 2
