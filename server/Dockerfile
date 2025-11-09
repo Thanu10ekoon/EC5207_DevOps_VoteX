@@ -11,11 +11,14 @@ RUN npm config set fetch-retries 5 && \
     npm config set fetch-retry-maxtimeout 120000 && \
     npm install --production
 
-# Copy application code
-COPY . .
+# Copy application source code
+COPY src ./src
+
+# Set environment variable
+ENV PORT=4000
 
 # Expose port
 EXPOSE 4000
 
 # Start the application
-CMD ["node", "index.js"]
+CMD ["node", "src/index.js"]

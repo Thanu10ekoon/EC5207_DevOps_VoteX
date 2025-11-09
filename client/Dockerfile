@@ -10,13 +10,17 @@ COPY package.json package-lock.json* ./
 RUN npm config set fetch-retries 5 && \
     npm config set fetch-retry-mintimeout 20000 && \
     npm config set fetch-retry-maxtimeout 120000 && \
-    npm install --legacy-peer-deps
+    npm install
 
 # Copy application code
-COPY . .
+COPY public ./public
+COPY src ./src
 
-# Build the application
-RUN npm run build
+# Set environment variable for API URL
+ENV REACT_APP_API_URL=/api
+
+# Build the application using npx
+RUN npx --yes react-scripts build
 
 # Stage 2: Serve with Nginx
 FROM nginx:1.27-alpine
