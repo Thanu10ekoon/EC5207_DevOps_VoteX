@@ -1,0 +1,126 @@
+---
+- name: Deploy VoteX Application
+  hosts: votex_servers
+  become: yes
+  vars:
+    app_dir: /home/ubuntu/votex
+    docker_registry_user: "{{ lookup('env', 'DOCKER_USERNAME') }}"
+    docker_registry_password: "{{ lookup('env', 'DOCKER_PASSWORD') }}"
+    mysql_root_password: "{{ lookup('env', 'MYSQL_ROOT_PASSWORD') }}"
+    mysql_database: "{{ lookup('env', 'MYSQL_DATABASE') }}"
+    mysql_user: "{{ lookup('env', 'MYSQL_USER') }}"
+    mysql_password: "{{ lookup('env', 'MYSQL_PASSWORD') }}"
+    jwt_secret: "{{ lookup('env', 'JWT_SECRET') }}"
+
+  tasks:
+    - name: Create application directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Copy docker-compose file
+      copy:
+        content: |
+          version: '3.9'
+
+          services:
+            mysql:
+              image: mysql:8.4
+              container_name: votex-mysql
+              environment:
+                MYSQL_ROOT_PASSWORD: {{ mysql_root_password }}
+                MYSQL_DATABASE: {{ mysql_database }}
+                MYSQL_USER: {{ mysql_user }}
+                MYSQL_PASSWORD: {{ mysql_password }}
+              volumes:
+                - mysql_data:/var/lib/mysql
+              healthcheck:
+                test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p{{ mysql_root_password }}"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+              restart: unless-stopped
+              networks:
+                - votex-network
+
+            server:
+              image: {{ docker_registry_user }}/votex-server:latest
+              container_name: votex-server
+              environment:
+                DB_HOST: mysql
+                DB_USER: {{ mysql_user }}
+                DB_PASSWORD: {{ mysql_password }}
+                DB_NAME: {{ mysql_database }}
+                JWT_SECRET: {{ jwt_secret }}
+                PORT: 4000
+              ports:
+                - "4000:4000"
+              depends_on:
+                mysql:
+                  condition: service_healthy
+              restart: unless-stopped
+              networks:
+                - votex-network
+
+            client:
+              image: {{ docker_registry_user }}/votex-client:latest
+              container_name: votex-client
+              ports:
+                - "80:80"
+                - "3000:80"
+              depends_on:
+                - server
+              restart: unless-stopped
+              networks:
+                - votex-network
+
+          volumes:
+            mysql_data:
+              driver: local
+
+          networks:
+            votex-network:
+              driver: bridge
+        dest: "{{ app_dir }}/docker-compose.yml"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+
+    - name: Login to Docker Hub
+      shell: echo "{{ docker_registry_password }}" | docker login -u "{{ docker_registry_user }}" --password-stdin
+      when: docker_registry_user != "" and docker_registry_password != ""
+      become_user: ubuntu
+
+    - name: Stop existing containers
+      shell: cd {{ app_dir }} && docker compose down
+      become_user: ubuntu
+      ignore_errors: yes
+
+    - name: Pull latest images
+      shell: cd {{ app_dir }} && docker compose pull
+      become_user: ubuntu
+
+    - name: Start application containers
+      shell: cd {{ app_dir }} && docker compose up -d
+      become_user: ubuntu
+
+    - name: Wait for containers to be ready
+      pause:
+        seconds: 20
+
+    - name: Verify containers are running
+      shell: docker ps
+      register: docker_ps
+      changed_when: false
+
+    - name: Display running containers
+      debug:
+        msg: "{{ docker_ps.stdout_lines }}"
+
+    - name: Logout from Docker Hub
+      shell: docker logout
+      become_user: ubuntu
+      ignore_errors: yes

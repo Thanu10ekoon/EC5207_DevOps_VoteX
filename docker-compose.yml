@@ -1,0 +1,58 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: votex-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-votex_db}
+      MYSQL_USER: ${MYSQL_USER:-votex_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-votexpass123}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword123}"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - votex-network
+
+  server:
+    image: ${DOCKER_USERNAME:-thanujaya10}/votex-server:${IMAGE_TAG:-latest}
+    container_name: votex-server
+    environment:
+      DB_HOST: mysql
+      DB_USER: ${MYSQL_USER:-votex_user}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-votexpass123}
+      DB_NAME: ${MYSQL_DATABASE:-votex_db}
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key}
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - votex-network
+
+  client:
+    image: ${DOCKER_USERNAME:-thanujaya10}/votex-client:${IMAGE_TAG:-latest}
+    container_name: votex-client
+    ports:
+      - "80:80"
+      - "3000:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - votex-network
+
+volumes:
+  mysql_data:
+
+networks:
+  votex-network:
+    driver: bridge
